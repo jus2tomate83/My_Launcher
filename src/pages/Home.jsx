@@ -9,7 +9,7 @@ export default function Home() {
     const [error, setError] = useState(null);
 
     // TODO: Rendre configurable via UI ou fichier de config
-    const USERNAME = "Lefebvre"; // Placeholder, devra être dynamique un jour
+    const USERNAME = "jus2tomate83"; // Placeholder, devra être dynamique un jour
 
     useEffect(() => {
         async function loadGames() {
