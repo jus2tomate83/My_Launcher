@@ -40,7 +40,11 @@ export const fetchGameRepos = async (username) => {
         const { data: repos } = await octokit.request('GET /users/{username}/repos', {
             username,
             sort: 'updated',
-            per_page: 100
+            per_page: 100,
+            headers: {
+                'If-None-Match': '', // Désactive le cache ETag conditionnel
+                'Cache-Control': 'no-cache' // Force le navigateur à ne pas garder la réponse
+            }
         });
 
         // Filtrer pour ne garder que ceux qui ont des releases ?
