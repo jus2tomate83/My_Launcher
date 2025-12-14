@@ -105,26 +105,34 @@ export const uploadGameVersion = async (repoName, versionTag, file, description)
 
     // 2. Upload l'asset (le .zip)
     // On utilise fetch direct pour éviter les soucis de CORS que Octokit peut provoquer dans le navigateur
-    // et pour gérer manuellement l'URL template.
+    // L'upload direct depuis le navigateur vers uploads.github.com est souvent bloqué par CORS.
+    // On tente le coup, et si ça échoue, on renverra la release créée pour que l'utilisateur puisse finir manuellement.
 
-    // L'URL ressemble à .../assets{?name,label}, on doit la nettoyer
     const uploadUrl = release.upload_url.split('{')[0] + `?name=${encodeURIComponent(file.name)}&label=Game%20Build`;
 
-    const fileData = await file.arrayBuffer();
+    try {
+        const fileData = await file.arrayBuffer();
+        const response = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `token ${token}`,
+                'Content-Type': 'application/zip',
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            body: fileData
+        });
 
-    const response = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-            'Authorization': `token ${token}`,
-            'Content-Type': 'application/zip',
-            'Accept': 'application/vnd.github.v3+json'
-        },
-        body: fileData
-    });
+        if (!response.ok) {
+            // Si c'est une 404 ou 400+, on considère ça comme une erreur, mais on garde la release
+            console.warn("Echec upload auto:", response.status);
+            return { success: false, release, error: `Erreur ${response.status}` };
+        }
 
-    if (!response.ok) {
-        throw new Error(`Erreur Upload: ${response.status} ${response.statusText}`);
+        return { success: true, release };
+
+    } catch (uploadError) {
+        console.warn("Blocage CORS ou réseau sur l'upload:", uploadError);
+        // C'est ici que l'erreur CORS atterrit (NetworkError)
+        return { success: false, release, error: "Upload bloqué par le navigateur (CORS)" };
     }
-
-    return release;
 };

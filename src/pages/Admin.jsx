@@ -44,13 +44,30 @@ export default function Admin() {
         setStatus({ type: '', msg: '' });
 
         try {
-            await uploadGameVersion(selectedGame, version, file, "Mise à jour via Web Launcher");
-            setStatus({ type: 'success', msg: `Version ${version} uploadée avec succès sur GitHub !` });
-            setFile(null);
-            setVersion('');
+            const result = await uploadGameVersion(selectedGame, version, file, "Mise à jour via Web Launcher");
+
+            if (result.success) {
+                setStatus({ type: 'success', msg: `Version ${version} uploadée avec succès sur GitHub !` });
+                setFile(null);
+                setVersion('');
+            } else {
+                // Cas où la release est créée mais l'upload a échoué (CORS)
+                // On propose un lien de secours
+                setStatus({
+                    type: 'warning',
+                    msg: (
+                        <span>
+                            Release créée, mais l'upload auto a été bloqué par le navigateur.
+                            <a href={result.release.html_url} target="_blank" className="underline font-bold ml-1">
+                                Cliquez ici pour ajouter le fichier ZIP manuellement.
+                            </a>
+                        </span>
+                    )
+                });
+            }
         } catch (err) {
             console.error(err);
-            setStatus({ type: 'error', msg: "Erreur lors de l'upload: " + err.message });
+            setStatus({ type: 'error', msg: "Erreur critique: " + err.message });
         } finally {
             setLoading(false);
         }
