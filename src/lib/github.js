@@ -40,16 +40,8 @@ export const fetchGameRepos = async (username) => {
         const { data: repos } = await octokit.request('GET /users/{username}/repos', {
             username,
             sort: 'updated',
-            per_page: 100,
-            headers: {
-                'If-None-Match': '', // Désactive le cache ETag conditionnel
-                'Cache-Control': 'no-cache' // Force le navigateur à ne pas garder la réponse
-            }
+            per_page: 100
         });
-
-        // Filtrer pour ne garder que ceux qui ont des releases ?
-        // Pour optimisation, on peut le faire en lazy loading ou juste afficher tous les repos
-        // Pour l'instant, on renvoie une liste enrichie
 
         const games = await Promise.all(repos.map(async (repo) => {
             try {
@@ -59,7 +51,11 @@ export const fetchGameRepos = async (username) => {
                 });
                 return { ...repo, latestRelease };
             } catch (e) {
-                // Pas de release trouvée, on retourne quand même le repo
+                // Si Rate Limit (403), on doit arrêter l'hémorragie
+                if (e.status === 403) {
+                    console.warn("Rate Limit GitHub hit via repo check");
+                    return { ...repo, latestRelease: null, error: "rate_limit" };
+                }
                 return { ...repo, latestRelease: null };
             }
         }));
@@ -67,6 +63,9 @@ export const fetchGameRepos = async (username) => {
         return games;
     } catch (error) {
         console.error("Erreur fetch repos:", error);
+        if (error.status === 403) {
+            throw new Error("Limite d'appels GitHub atteinte (60/heure). Connectez-vous en Admin pour augmenter la limite.");
+        }
         throw error;
     }
 };

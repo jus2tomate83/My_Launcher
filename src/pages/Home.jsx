@@ -13,20 +13,34 @@ export default function Home() {
     const USERNAME = "jus2tomate83";
 
     useEffect(() => {
+        let mounted = true;
         async function loadGames() {
+            // Timeout de sécurité de 8 secondes
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Délai d'attente dépassé (GitHub est lent ou bloque).")), 8000)
+            );
+
             try {
-                const data = await fetchGameRepos(USERNAME);
-                // On ne garde que les jeux avec une release
-                const validGames = data.filter(g => g.latestRelease && g.latestRelease.assets && g.latestRelease.assets.length > 0);
+                const data = await Promise.race([
+                    fetchGameRepos(USERNAME),
+                    timeoutPromise
+                ]);
+
+                if (!mounted) return;
+
+                // Filtrage
+                const validGames = data.filter(g => g.latestRelease && g.latestRelease.assets && g.latestRelease.assets.length > 0 && !g.error);
                 setGames(validGames);
             } catch (err) {
-                setError("Impossible de charger les jeux.");
+                if (!mounted) return;
                 console.error(err);
+                setError(err.message || "Impossible de charger les jeux.");
             } finally {
-                setLoading(false);
+                if (mounted) setLoading(false);
             }
         }
         loadGames();
+        return () => { mounted = false; };
     }, []);
 
     if (loading) return <div className="min-h-screen text-white flex items-center justify-center"><div className="animate-pulse">Chargement de la bibliothèque...</div></div>;
