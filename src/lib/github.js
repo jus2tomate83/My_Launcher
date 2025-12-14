@@ -136,3 +136,57 @@ export const uploadGameVersion = async (repoName, versionTag, file, description)
         return { success: false, release, error: "Upload bloqué par le navigateur (CORS)" };
     }
 };
+
+/**
+ * Crée un nouveau dépôt pour un jeu
+ */
+export const createGameRepo = async (name, description, isPrivate = false) => {
+    const octokit = getOctokit();
+    // Création du repo
+    const { data: repo } = await octokit.request('POST /user/repos', {
+        name,
+        description,
+        private: isPrivate,
+        auto_init: true, // Init avec README pour pouvoir uploader direct
+    });
+    return repo;
+};
+
+/**
+ * Upload un fichier directement dans le repo (ex: cover.jpg)
+ */
+export const uploadFileToRepo = async (repoName, path, file, message) => {
+    const { username, token } = getAuth();
+    const octokit = getOctokit();
+
+    // Convert to Base64
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    const content = btoa(binary);
+
+    // Check if file exists to get sha (for update)
+    let sha;
+    try {
+        const { data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+            owner: username,
+            repo: repoName,
+            path
+        });
+        sha = data.sha;
+    } catch (e) {
+        // File doesn't exist, fine
+    }
+
+    await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+        owner: username,
+        repo: repoName,
+        path,
+        message: message || `Update ${path}`,
+        content,
+        sha
+    });
+};
