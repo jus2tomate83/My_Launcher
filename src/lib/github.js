@@ -55,12 +55,12 @@ export const fetchGameRepos = async (username) => {
                 });
                 return { ...repo, latestRelease };
             } catch (e) {
-                // Pas de release trouvée
-                return null;
+                // Pas de release trouvée, on retourne quand même le repo
+                return { ...repo, latestRelease: null };
             }
         }));
 
-        return games.filter(g => g !== null); // On garde seulement les repos avec des releases (donc des jeux "publiés")
+        return games;
     } catch (error) {
         console.error("Erreur fetch repos:", error);
         throw error;

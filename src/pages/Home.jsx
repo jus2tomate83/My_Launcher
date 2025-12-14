@@ -55,9 +55,11 @@ export default function Home() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {games.map((game, i) => (
-                        <GameCard key={game.id} game={game} index={i} />
-                    ))}
+                    {games
+                        .filter(game => game.latestRelease) // On affiche seulement les jeux téléchargeables sur l'accueil
+                        .map((game, i) => (
+                            <GameCard key={game.id} game={game} index={i} />
+                        ))}
                 </div>
             )}
         </div>
