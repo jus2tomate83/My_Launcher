@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getAuth, setAuth, clearAuth, fetchGameRepos, uploadGameVersion, createGameRepo, uploadFileToRepo } from '../lib/github';
-import { Upload, LogIn, Check, AlertCircle, Loader2, Github, Package, Calendar, ExternalLink, Plus, Image as ImageIcon, Search, Trash2 } from 'lucide-react';
+import { getAuth, setAuth, clearAuth, fetchGameRepos, uploadGameVersion, createGameRepo, uploadFileToRepo, fetchAllGameStats } from '../lib/github';
+import { Upload, LogIn, Check, AlertCircle, Loader2, Github, Package, Calendar, ExternalLink, Plus, Image as ImageIcon, Search, Trash2, PieChart, BarChart3, TrendingUp } from 'lucide-react';
 
 export default function Admin() {
     const [auth, setAuthState] = useState(getAuth());
@@ -8,7 +8,11 @@ export default function Admin() {
     const [loading, setLoading] = useState(false);
     const [creating, setCreating] = useState(false);
 
-    // Vue: 'list' | 'create'
+    // Stats State
+    const [stats, setStats] = useState([]);
+    const [loadingStats, setLoadingStats] = useState(false);
+
+    // Vue: 'list' | 'create' | 'stats'
     const [view, setView] = useState('list');
 
     // États Upload
@@ -29,6 +33,13 @@ export default function Admin() {
         }
     }, [auth]);
 
+    // Charger les stats quand on change de vue vers 'stats'
+    useEffect(() => {
+        if (view === 'stats' && auth.username) {
+            loadStats();
+        }
+    }, [view]);
+
     const loadGames = () => {
         setLoading(true);
         fetchGameRepos(auth.username)
@@ -37,6 +48,14 @@ export default function Admin() {
             })
             .catch(err => console.error(err))
             .finally(() => setLoading(false));
+    };
+
+    const loadStats = () => {
+        setLoadingStats(true);
+        fetchAllGameStats(auth.username)
+            .then(data => setStats(data))
+            .catch(err => console.error(err))
+            .finally(() => setLoadingStats(false));
     };
 
     const handleLogin = (e) => {
@@ -161,9 +180,14 @@ export default function Admin() {
             <div className="w-80 bg-gray-900/40 border-r border-white/10 flex flex-col">
                 <div className="p-4 border-b border-white/10 flex items-center justify-between sticky top-0 bg-gray-900/95 backdrop-blur z-10">
                     <h2 className="font-bold text-white flex items-center gap-2"><Package className="w-5 h-5 text-indigo-400" /> Projets</h2>
-                    <button onClick={() => setView('create')} className="p-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white transition-colors">
-                        <Plus className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => setView('stats')} className={`p-1.5 rounded-lg transition-colors ${view === 'stats' ? 'bg-indigo-600/50 text-white' : 'hover:bg-indigo-600/30 text-indigo-300'}`} title="Statistiques">
+                            <BarChart3 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setView('create')} className="p-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white transition-colors" title="Nouveau Projet">
+                            <Plus className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -188,12 +212,85 @@ export default function Admin() {
             {/* MAIN CONTENT Area */}
             <div className="flex-1 overflow-y-auto bg-black/10 p-8">
 
+                {/* VIEW: STATS */}
+                {view === 'stats' && (
+                    <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 space-y-8">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-3 bg-indigo-500/10 rounded-xl text-indigo-400">
+                                <TrendingUp className="w-8 h-8" />
+                            </div>
+                            <div>
+                                <h1 className="text-3xl font-bold text-white">Statistiques de Téléchargement</h1>
+                                <p className="text-gray-400">Suivi des performances de vos jeux</p>
+                            </div>
+                        </div>
+
+                        {loadingStats ? (
+                            <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-indigo-400 animate-spin" /></div>
+                        ) : (
+                            <>
+                                {/* Global Stats Card */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur">
+                                        <div className="text-gray-400 text-sm font-bold uppercase mb-2">Total Téléchargements</div>
+                                        <div className="text-4xl font-black text-white">
+                                            {stats.reduce((acc, curr) => acc + curr.totalDownloads, 0)}
+                                        </div>
+                                    </div>
+                                    <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur">
+                                        <div className="text-gray-400 text-sm font-bold uppercase mb-2">Jeu le plus populaire</div>
+                                        <div className="text-xl font-bold text-indigo-400 truncate">
+                                            {stats[0]?.totalDownloads > 0 ? stats[0].name : 'Aucun'}
+                                        </div>
+                                        {stats[0] && <div className="text-xs text-gray-500 mt-1">{stats[0].totalDownloads} téléchargements</div>}
+                                    </div>
+                                    <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur">
+                                        <div className="text-gray-400 text-sm font-bold uppercase mb-2">Nombre de Projets</div>
+                                        <div className="text-4xl font-black text-white">{stats.length}</div>
+                                    </div>
+                                </div>
+
+                                {/* Table */}
+                                <div className="bg-gray-900/60 border border-white/10 rounded-2xl overflow-hidden backdrop-blur">
+                                    <div className="p-6 border-b border-white/5">
+                                        <h3 className="font-bold text-white">Détails par jeu</h3>
+                                    </div>
+                                    <table className="w-full text-left">
+                                        <thead className="bg-white/5 text-gray-400 text-xs uppercase font-bold">
+                                            <tr>
+                                                <th className="p-4">Nom du Jeu</th>
+                                                <th className="p-4">Dernière Version</th>
+                                                <th className="p-4">Nombre de releases</th>
+                                                <th className="p-4 text-right">Téléchargements</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {stats.map(game => (
+                                                <tr key={game.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="p-4 font-medium text-white">{game.name}</td>
+                                                    <td className="p-4 text-gray-400 font-mono text-sm">{game.latestVersion}</td>
+                                                    <td className="p-4 text-gray-500 text-sm">{game.releaseCount}</td>
+                                                    <td className="p-4 text-right">
+                                                        <span className="inline-block bg-indigo-500/10 text-indigo-400 px-3 py-1 rounded-full font-bold font-mono">
+                                                            {game.totalDownloads}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
                 {/* VIEW: CREATE NEW PROJECT */}
                 {view === 'create' && (
                     <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
                         <h1 className="text-3xl font-bold text-white mb-6">Créer un Nouveau Projet</h1>
                         <form onSubmit={handleCreateProject} className="bg-gray-900/60 border border-white/10 rounded-2xl p-8 space-y-6">
-
+                            {/* ... (Form Content Same as Before) ... */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Nom du Projet</label>
                                 <input

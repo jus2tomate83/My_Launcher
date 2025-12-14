@@ -68,6 +68,47 @@ export const fetchGameRepos = async (username) => {
         }
         throw error;
     }
+}
+};
+
+/**
+ * Récupère les stats détaillées (Total téléchargements toutes versions confondues)
+ */
+export const fetchAllGameStats = async (username) => {
+    const octokit = getOctokit();
+    const { data: repos } = await octokit.request('GET /users/{username}/repos', { username, per_page: 100 });
+
+    const stats = await Promise.all(repos.map(async (repo) => {
+        try {
+            // On récupère TOUTES les releases, pas juste la dernière
+            const { data: releases } = await octokit.request('GET /repos/{owner}/{repo}/releases', {
+                owner: username,
+                repo: repo.name,
+                per_page: 100
+            });
+
+            // Calcul du total des téléchargements
+            let totalDownloads = 0;
+            releases.forEach(release => {
+                release.assets.forEach(asset => {
+                    totalDownloads += asset.download_count;
+                });
+            });
+
+            return {
+                id: repo.id,
+                name: repo.name,
+                totalDownloads,
+                releaseCount: releases.length,
+                latestVersion: releases[0]?.tag_name || 'N/A'
+            };
+        } catch (e) {
+            return { id: repo.id, name: repo.name, totalDownloads: 0, releaseCount: 0, latestVersion: 'N/A' };
+        }
+    }));
+
+    // Tri par popularité
+    return stats.sort((a, b) => b.totalDownloads - a.totalDownloads);
 };
 
 /**
