@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAuth, setAuth, clearAuth, fetchGameRepos, uploadGameVersion, createGameRepo, uploadFileToRepo } from '../lib/github';
-import { Upload, LogIn, Check, AlertCircle, Loader2, Github, Package, Calendar, ExternalLink, Plus, Image as ImageIcon, Search } from 'lucide-react';
+import { Upload, LogIn, Check, AlertCircle, Loader2, Github, Package, Calendar, ExternalLink, Plus, Image as ImageIcon, Search, Trash2 } from 'lucide-react';
 
 export default function Admin() {
     const [auth, setAuthState] = useState(getAuth());
@@ -14,7 +14,10 @@ export default function Admin() {
     // États Upload
     const [selectedGame, setSelectedGame] = useState(null);
     const [file, setFile] = useState(null);
+    const [coverFile, setCoverFile] = useState(null);
     const [version, setVersion] = useState('');
+    const [changelog, setChangelog] = useState(''); // Patch Notes
+    const [customGameName, setCustomGameName] = useState('');
     const [uploadStatus, setUploadStatus] = useState({ type: '', msg: '' });
 
     // États Création Projet
@@ -30,7 +33,6 @@ export default function Admin() {
         setLoading(true);
         fetchGameRepos(auth.username)
             .then(repos => {
-                // Optionnel: filtrer le repo du launcher lui-même si besoin
                 setGames(repos);
             })
             .catch(err => console.error(err))
@@ -57,7 +59,6 @@ export default function Admin() {
         setCreating(true);
         try {
             // 1. Créer le repo
-            // Nettoyage du nom pour l'URL
             const repoName = newProject.name.trim().replace(/\s+/g, '-').toLowerCase();
             const repo = await createGameRepo(repoName, newProject.description);
 
@@ -71,8 +72,6 @@ export default function Admin() {
             setNewProject({ name: '', description: '', cover: null });
             loadGames();
 
-            // Auto select the new game
-            // Note: GitHub API might take a ms to index, so we pass the local object temporarily
             setSelectedGame({ ...repo, name: repoName, latestRelease: null });
             window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -81,6 +80,14 @@ export default function Admin() {
             alert("Erreur création: " + err.message);
             setCreating(false);
         }
+    };
+
+    // Utilitaire pour renommer un fichier (hack pour garder le type)
+    const renameFile = (originalFile, newName) => {
+        return new File([originalFile], newName, {
+            type: originalFile.type,
+            lastModified: originalFile.lastModified,
+        });
     };
 
     const handleUpload = async (e) => {
@@ -92,7 +99,7 @@ export default function Admin() {
 
         // Renommage du zip
         const finalName = customGameName.trim().replace(/[^a-zA-Z0-9-_ ]/g, '') + '.zip';
-        const renamedFile = new File([file], finalName, { type: file.type }); // Assuming renameFile function is defined or replaced with this logic
+        const renamedFile = renameFile(file, finalName);
 
         try {
             // 1. Upload de la nouvelle cover si présente
@@ -101,14 +108,17 @@ export default function Admin() {
             }
 
             // 2. Création Release & Upload Zip
-            const result = await uploadGameVersion(selectedGame.name, version, renamedFile, `Version ${version} - ${customGameName}`);
+            // On utilise le changelog (Patch Notes) comme description de la release
+            const releaseBody = changelog || `Version ${version} - ${customGameName}`;
+            const result = await uploadGameVersion(selectedGame.name, version, renamedFile, releaseBody);
 
             if (result.success) {
-                setUploadStatus({ type: 'success', msg: `Version ${version} de "${customGameName}" uploadée (avec nouvelle image) !` });
+                setUploadStatus({ type: 'success', msg: `Version ${version} de "${customGameName}" uploadée !` });
                 setFile(null);
                 setCoverFile(null);
                 setVersion('');
-                setCustomGameName('');
+                setChangelog(''); // Reset changelog
+                // setCustomGameName(''); // On garde le nom
                 loadGames();
             } else {
                 setUploadStatus({
@@ -132,7 +142,7 @@ export default function Admin() {
 
     // Login View
     if (!auth.token) {
-        return ( /* ... Code Login identique ... */
+        return (
             <div className="max-w-md mx-auto mt-20 p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
                 <h2 className="text-2xl font-bold text-white mb-6 text-center">Connexion Admin</h2>
                 <form onSubmit={handleLogin} className="space-y-4">
@@ -147,7 +157,7 @@ export default function Admin() {
     return (
         <div className="flex h-[calc(100vh-80px)]">
 
-            {/* SIDEBAR: Liste des Projets */}
+            {/* SIDEBAR */}
             <div className="w-80 bg-gray-900/40 border-r border-white/10 flex flex-col">
                 <div className="p-4 border-b border-white/10 flex items-center justify-between sticky top-0 bg-gray-900/95 backdrop-blur z-10">
                     <h2 className="font-bold text-white flex items-center gap-2"><Package className="w-5 h-5 text-indigo-400" /> Projets</h2>
@@ -192,7 +202,6 @@ export default function Admin() {
                                     className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-indigo-500"
                                     required
                                 />
-                                <p className="text-xs text-gray-500 mt-2">Un dépôt GitHub sera créé automatiquement.</p>
                             </div>
 
                             <div>
@@ -272,14 +281,64 @@ export default function Admin() {
                                     </label>
                                 </div>
 
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Nom du Jeu</label>
+                                        <input
+                                            value={customGameName}
+                                            onChange={e => setCustomGameName(e.target.value)}
+                                            placeholder="Ex: Super Mario"
+                                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-indigo-500 transition-colors"
+                                            required
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Version</label>
+                                        <input
+                                            value={version}
+                                            onChange={e => setVersion(e.target.value)}
+                                            placeholder="v1.0.0"
+                                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white font-mono outline-none focus:border-indigo-500 transition-colors"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* PATCH NOTES */}
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Version</label>
-                                    <input
-                                        value={version}
-                                        onChange={e => setVersion(e.target.value)}
-                                        placeholder="v1.0.0"
-                                        className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white font-mono outline-none focus:border-indigo-500"
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Patch Notes / Nouveautés</label>
+                                    <textarea
+                                        value={changelog}
+                                        onChange={e => setChangelog(e.target.value)}
+                                        placeholder="- Ajout du niveau 3&#10;- Correction du bug de saut&#10;- Amélioration des graphismes..."
+                                        className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-indigo-500 h-32 resize-none transition-colors"
                                     />
+                                </div>
+
+                                {/* COVER UPDATE (Optionnel) */}
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Changer l'image (Optionnel)</label>
+                                    <div className={`border border-dashed border-white/10 hover:border-indigo-500/50 rounded-xl p-3 flex items-center gap-4 cursor-pointer transition-colors ${coverFile ? 'bg-green-500/5 border-green-500/30' : ''}`}>
+                                        <input type="file" id="update-cover" className="hidden" accept="image/*" onChange={e => setCoverFile(e.target.files[0])} />
+                                        <label htmlFor="update-cover" className="cursor-pointer flex items-center gap-3 w-full">
+                                            <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center text-gray-400">
+                                                <ImageIcon className="w-5 h-5" />
+                                            </div>
+                                            {coverFile ? (
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-bold text-green-400 truncate">{coverFile.name}</p>
+                                                    <p className="text-[10px] text-gray-500">Sera la nouvelle couverture</p>
+                                                </div>
+                                            ) : (
+                                                <div className="flex-1">
+                                                    <p className="text-sm text-gray-300">Cliquer pour changer l'image de fond</p>
+                                                    <p className="text-[10px] text-gray-500">Laissez vide pour garder l'actuelle</p>
+                                                </div>
+                                            )}
+                                        </label>
+                                        {coverFile && <button onClick={(e) => { e.preventDefault(); setCoverFile(null); }} className="p-2 hover:text-red-400 text-gray-500"><Trash2 className="w-4 h-4" /></button>}
+                                    </div>
                                 </div>
 
                                 <button disabled={loading || !file} className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${loading || !file ? 'bg-gray-700 text-gray-500' : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:scale-[1.02] text-white'}`}>
