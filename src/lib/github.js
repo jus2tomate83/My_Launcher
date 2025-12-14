@@ -88,19 +88,27 @@ export const uploadGameVersion = async (repoName, versionTag, file, description)
     });
 
     // 2. Upload l'asset (le .zip)
-    // Note: L'upload d'asset utilise un domaine différent (uploads.github.com) géré par octokit
+    // On utilise fetch direct pour éviter les soucis de CORS que Octokit peut provoquer dans le navigateur
+    // et pour gérer manuellement l'URL template.
+
+    // L'URL ressemble à .../assets{?name,label}, on doit la nettoyer
+    const uploadUrl = release.upload_url.split('{')[0] + `?name=${encodeURIComponent(file.name)}&label=Game%20Build`;
+
     const fileData = await file.arrayBuffer();
 
-    await octokit.request({
-        method: "POST",
-        url: release.upload_url,
+    const response = await fetch(uploadUrl, {
+        method: 'POST',
         headers: {
-            "content-type": "application/zip",
+            'Authorization': `token ${token}`,
+            'Content-Type': 'application/zip',
+            'Accept': 'application/vnd.github.v3+json'
         },
-        data: fileData,
-        name: file.name,
-        label: "Game Build"
+        body: fileData
     });
+
+    if (!response.ok) {
+        throw new Error(`Erreur Upload: ${response.status} ${response.statusText}`);
+    }
 
     return release;
 };
