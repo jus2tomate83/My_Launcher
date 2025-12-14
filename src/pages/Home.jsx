@@ -16,7 +16,9 @@ export default function Home() {
         async function loadGames() {
             try {
                 const data = await fetchGameRepos(USERNAME);
-                setGames(data);
+                // On ne garde que les jeux avec une release
+                const validGames = data.filter(g => g.latestRelease && g.latestRelease.assets && g.latestRelease.assets.length > 0);
+                setGames(validGames);
             } catch (err) {
                 setError("Impossible de charger les jeux.");
                 console.error(err);
