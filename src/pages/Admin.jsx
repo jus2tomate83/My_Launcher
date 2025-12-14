@@ -9,9 +9,10 @@ export default function Admin() {
     const [loading, setLoading] = useState(false);
 
     // États pour l'upload
-    const [selectedGame, setSelectedGame] = useState(null); // Objet complet du jeu sélectionné
+    const [selectedGame, setSelectedGame] = useState(null);
     const [file, setFile] = useState(null);
     const [version, setVersion] = useState('');
+    const [customGameName, setCustomGameName] = useState(''); // Nouveau state pour le nom
     const [uploadStatus, setUploadStatus] = useState({ type: '', msg: '' });
 
     // Effet pour charger les jeux une fois connecté
@@ -44,29 +45,42 @@ export default function Admin() {
         setAuthState({ token: null, username: null });
     };
 
+    // Utilitaire pour renommer un fichier
+    const renameFile = (originalFile, newName) => {
+        return new File([originalFile], newName, {
+            type: originalFile.type,
+            lastModified: originalFile.lastModified,
+        });
+    };
+
     const handleUpload = async (e) => {
         e.preventDefault();
-        if (!file || !selectedGame || !version) return;
+        if (!file || !selectedGame || !version || !customGameName) return;
 
         setLoading(true);
         setUploadStatus({ type: '', msg: '' });
 
+        // Renommage du fichier avec le nom choisi par l'utilisateur
+        // On s'assure qu'il finit par .zip
+        const finalName = customGameName.trim().replace(/[^a-zA-Z0-9-_ ]/g, '') + '.zip';
+        const renamedFile = renameFile(file, finalName);
+
         try {
-            const result = await uploadGameVersion(selectedGame.name, version, file, "Mise à jour via Web Launcher");
+            const result = await uploadGameVersion(selectedGame.name, version, renamedFile, `Version ${version} - ${customGameName}`);
 
             if (result.success) {
-                setUploadStatus({ type: 'success', msg: `Version ${version} uploadée avec succès !` });
+                setUploadStatus({ type: 'success', msg: `Version ${version} de "${customGameName}" uploadée !` });
                 setFile(null);
                 setVersion('');
-                loadGames(); // Recharger la liste pour mettre à jour la version affichée
+                loadGames();
             } else {
                 setUploadStatus({
                     type: 'warning',
                     msg: (
                         <span>
-                            Release créée, mais l'upload auto a été bloqué par le navigateur.
+                            Release créée, mais l'upload auto bloqué.
                             <a href={result.release.html_url} target="_blank" className="underline font-bold ml-1">
-                                Cliquez ici pour ajouter le fichier ZIP manuellement.
+                                Cliquez ici pour mettre le ZIP ({finalName}) manuellement.
                             </a>
                         </span>
                     )
@@ -117,148 +131,144 @@ export default function Admin() {
     }
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-6 border-b border-white/10">
-                <div>
-                    <h1 className="text-3xl font-bold text-white">Tableau de Bord</h1>
-                    <p className="text-gray-400">Gérez vos projets et publiez des mises à jours.</p>
+        <div className="flex h-[calc(100vh-80px)]">
+            {/* Sidebar Compacte */}
+            <div className="w-80 border-r border-white/10 flex flex-col bg-gray-900/40">
+                <div className="p-4 border-b border-white/10">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <Package className="w-5 h-5 text-indigo-400" /> Projets
+                    </h2>
                 </div>
-                <div className="flex items-center gap-4">
-                    <span className="text-white font-mono bg-white/10 px-3 py-1 rounded-full text-sm">{auth.username}</span>
-                    <button onClick={handleLogout} className="text-sm text-red-400 hover:text-red-300">Déconnexion</button>
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                    {loading && <div className="text-center py-4 text-xs text-gray-500">Chargement...</div>}
+                    {games.map(game => (
+                        <button
+                            key={game.id}
+                            onClick={() => {
+                                setSelectedGame(game);
+                                setCustomGameName(game.name); // Pré-remplir avec le nom du repo
+                                setUploadStatus({ type: '', msg: '' });
+                            }}
+                            className={`w-full text-left p-3 rounded-lg border transition-all hover:bg-white/5 ${selectedGame?.id === game.id ? 'bg-indigo-600/20 border-indigo-500/50 text-white' : 'border-transparent text-gray-400'}`}
+                        >
+                            <div className="font-bold truncate">{game.name}</div>
+                            <div className="text-xs opacity-50 flex justify-between mt-1">
+                                <span>{game.latestRelease?.tag_name || 'v0.0.0'}</span>
+                                <span>{new Date(game.updated_at).toLocaleDateString()}</span>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+                <div className="p-4 border-t border-white/10 bg-black/20">
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>{auth.username}</span>
+                        <button onClick={() => { clearAuth(); setAuthState({ token: null }); }} className="text-red-400 hover:underline">Déconnexion</button>
+                    </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Colonne de Gauche : Liste des Projets */}
-                <div className="lg:col-span-2 space-y-6">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Package className="w-5 h-5 text-indigo-400" /> Vos Projets GitHub
-                    </h2>
-
-                    <div className="grid gap-4">
-                        {loading && <div className="text-center py-10 text-gray-500">Chargement des données GitHub...</div>}
-
-                        {!loading && games.map(game => (
-                            <div
-                                key={game.id}
-                                onClick={() => {
-                                    setSelectedGame(game);
-                                    setUploadStatus({ type: '', msg: '' });
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between group ${selectedGame?.id === game.id ? 'bg-indigo-600/10 border-indigo-500' : 'bg-gray-900/40 border-white/5 hover:border-white/20'}`}
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-xl font-bold text-white/20">
-                                        {game.name.substring(0, 2).toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <h3 className={`font-bold ${selectedGame?.id === game.id ? 'text-indigo-300' : 'text-white'}`}>{game.name}</h3>
-                                        <p className="text-sm text-gray-500 line-clamp-1">{game.description || "Pas de description"}</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-4 text-sm text-gray-400">
-                                    <div className="flex items-col text-right">
-                                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(game.updated_at)}</span>
-                                        <span className="flex items-center gap-1 ml-auto text-indigo-400 bg-indigo-400/10 px-2 rounded mt-1">
-                                            {game.latestRelease?.tag_name || 'v0.0.0'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+            {/* Main Content */}
+            <div className="flex-1 overflow-y-auto p-8 bg-black/10">
+                {!selectedGame ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-50">
+                        <Package className="w-24 h-24 mb-4 stroke-1" />
+                        <p className="text-xl">Sélectionnez un projet à gauche pour commencer</p>
                     </div>
-                </div>
+                ) : (
+                    <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-                {/* Colonne de Droite : Action (Upload / Détails) */}
-                <div className="lg:col-span-1">
-                    <div className="sticky top-24 space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h1 className="text-3xl font-bold text-white mb-2">{selectedGame.name}</h1>
+                                <a href={selectedGame.html_url} target="_blank" className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-sm">
+                                    <ExternalLink className="w-3 h-3" /> Voir le dépôt GitHub
+                                </a>
+                            </div>
+                        </div>
 
-                        {selectedGame ? (
-                            <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-                                <div className="flex items-start justify-between mb-6">
-                                    <div>
-                                        <h3 className="text-2xl font-bold text-white">{selectedGame.name}</h3>
-                                        <a href={selectedGame.html_url} target="_blank" className="text-xs text-indigo-400 hover:underline flex items-center gap-1 mt-1">
-                                            Voir sur GitHub <ExternalLink className="w-3 h-3" />
-                                        </a>
-                                    </div>
-                                    {selectedGame.latestRelease && (
-                                        <div className="text-right">
-                                            <div className="text-xs text-gray-500 uppercase font-bold">Dernière version</div>
-                                            <div className="text-xl font-mono text-white">{selectedGame.latestRelease.tag_name}</div>
-                                        </div>
-                                    )}
+                        <div className="bg-gray-900/60 border border-white/10 rounded-2xl p-8 backdrop-blur-sm shadow-2xl">
+                            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                                <Upload className="w-5 h-5 text-indigo-400" /> Nouvelle Version
+                            </h2>
+
+                            <form onSubmit={handleUpload} className="space-y-6">
+
+                                {/* 1. Sélection Fichier */}
+                                <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${file ? 'border-green-500/50 bg-green-500/10' : 'border-white/10 hover:border-indigo-500/50 hover:bg-white/5'}`}>
+                                    <input type="file" id="zip-upload" className="hidden" accept=".zip" onChange={e => {
+                                        if (e.target.files[0]) {
+                                            setFile(e.target.files[0]);
+                                            // Auto detection version
+                                            const versionMatch = e.target.files[0].name.match(/v?(\d+\.\d+\.\d+)/);
+                                            if (versionMatch) setVersion('v' + versionMatch[1]);
+                                        }
+                                    }} />
+                                    <label htmlFor="zip-upload" className="cursor-pointer block">
+                                        {file ? (
+                                            <div className="space-y-2">
+                                                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-2 text-white">
+                                                    <Check className="w-6 h-6" />
+                                                </div>
+                                                <p className="font-bold text-green-400 text-lg">{file.name}</p>
+                                                <p className="text-sm text-gray-500">Cliquez pour changer</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <div className="w-12 h-12 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-2 text-indigo-400">
+                                                    <Upload className="w-6 h-6" />
+                                                </div>
+                                                <div className="text-lg font-medium text-white">Glisser un fichier .ZIP</div>
+                                                <div className="text-sm text-gray-500">ou cliquez pour parcourir</div>
+                                            </div>
+                                        )}
+                                    </label>
                                 </div>
 
-                                <hr className="border-white/5 mb-6" />
-
-                                <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Upload className="w-4 h-4" /> Publier une mise à jour</h4>
-
-                                <form onSubmit={handleUpload} className="space-y-4">
-                                    {/* Zone de Drop Mini */}
-                                    <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${file ? 'border-green-500 bg-green-500/5' : 'border-white/20 hover:border-indigo-500 hover:bg-white/5'}`}>
-                                        <input type="file" id="zip-upload" className="hidden" accept=".zip" onChange={e => {
-                                            if (e.target.files[0]) {
-                                                setFile(e.target.files[0]);
-                                                const versionMatch = e.target.files[0].name.match(/v?(\d+\.\d+\.\d+)/);
-                                                if (versionMatch) setVersion('v' + versionMatch[1]);
-                                            }
-                                        }} />
-                                        <label htmlFor="zip-upload" className="cursor-pointer block">
-                                            {file ? (
-                                                <div>
-                                                    <p className="font-bold text-green-400 truncate">{file.name}</p>
-                                                    <p className="text-xs text-gray-500">Prêt à uploader</p>
-                                                </div>
-                                            ) : (
-                                                <div>
-                                                    <span className="text-indigo-400 font-bold">Choisir un fichier .ZIP</span>
-                                                </div>
-                                            )}
-                                        </label>
+                                <div className="grid grid-cols-2 gap-6">
+                                    {/* 2. Nom du Jeu (Affichage) */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Nom du Jeu (Affichage)</label>
+                                        <input
+                                            value={customGameName}
+                                            onChange={e => setCustomGameName(e.target.value)}
+                                            placeholder="Ex: Super Mario"
+                                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-indigo-500 transition-colors"
+                                            required
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">C'est ce nom qui s'affichera sur l'accueil.</p>
                                     </div>
 
+                                    {/* 3. Version */}
                                     <div>
-                                        <label className="text-xs font-bold text-gray-400 uppercase">Version</label>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Version</label>
                                         <input
                                             value={version}
                                             onChange={e => setVersion(e.target.value)}
-                                            placeholder="v1.0.1"
-                                            className="w-full mt-1 px-3 py-2 bg-black/40 border border-white/10 rounded-lg text-white font-mono focus:border-indigo-500 outline-none"
+                                            placeholder="v1.0.0"
+                                            className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-xl text-white font-mono outline-none focus:border-indigo-500 transition-colors"
+                                            required
                                         />
                                     </div>
+                                </div>
 
-                                    <button
-                                        disabled={loading || !file}
-                                        className={`w-full py-3 rounded-lg font-bold transition-all ${loading || !file ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'}`}
-                                    >
-                                        {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Publier la version'}
-                                    </button>
-                                </form>
+                                <button
+                                    disabled={loading || !file}
+                                    className={`w-full py-4 rounded-xl font-bold text-lg shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-3 transition-all ${loading || !file ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:scale-[1.02] text-white'}`}
+                                >
+                                    {loading ? <Loader2 className="animate-spin" /> : <Upload className="w-5 h-5" />}
+                                    {loading ? 'Publication...' : 'Publier'}
+                                </button>
+                            </form>
 
-                                {/* Status Message */}
-                                {uploadStatus.msg && (
-                                    <div className={`mt-4 p-3 rounded-lg text-sm border ${uploadStatus.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' : uploadStatus.type === 'warning' ? 'bg-orange-500/10 border-orange-500/20 text-orange-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
-                                        {uploadStatus.msg}
-                                    </div>
-                                )}
-
-                            </div>
-                        ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-center p-8 border border-dashed border-white/10 rounded-2xl text-gray-500">
-                                <Package className="w-12 h-12 mb-4 opacity-50" />
-                                <p>Sélectionnez un projet dans la liste pour voir les détails et uploader des fichiers.</p>
-                            </div>
-                        )}
-
+                            {uploadStatus.msg && (
+                                <div className={`mt-6 p-4 rounded-xl flex items-start gap-3 ${uploadStatus.type === 'error' ? 'bg-red-500/10 text-red-400' : uploadStatus.type === 'warning' ? 'bg-orange-500/10 text-orange-400' : 'bg-green-500/10 text-green-400'}`}>
+                                    {uploadStatus.type === 'warning' ? <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" /> : null}
+                                    <div className="text-sm">{uploadStatus.msg}</div>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-
+                )}
             </div>
         </div>
     );
