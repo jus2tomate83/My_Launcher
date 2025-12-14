@@ -76,16 +76,32 @@ export const uploadGameVersion = async (repoName, versionTag, file, description)
 
     const octokit = getOctokit();
 
-    // 1. Créer la Release
-    const { data: release } = await octokit.request('POST /repos/{owner}/{repo}/releases', {
-        owner: username,
-        repo: repoName,
-        tag_name: versionTag,
-        name: `Version ${versionTag}`,
-        body: description || "Nouvelle version uploadée via Game Launcher",
-        draft: false,
-        prerelease: false
-    });
+    // 1. Créer la Release (ou récupérer l'existante si elle a déjà été créée lors d'un essai précédent)
+    let release;
+    try {
+        const { data } = await octokit.request('POST /repos/{owner}/{repo}/releases', {
+            owner: username,
+            repo: repoName,
+            tag_name: versionTag,
+            name: `Version ${versionTag}`,
+            body: description || "Nouvelle version uploadée via Game Launcher",
+            draft: false,
+            prerelease: false
+        });
+        release = data;
+    } catch (error) {
+        // Si la release existe déjà (erreur 422), on la récupère pour uploader le fichier dedans
+        if (error.status === 422) {
+            const { data } = await octokit.request('GET /repos/{owner}/{repo}/releases/tags/{tag}', {
+                owner: username,
+                repo: repoName,
+                tag: versionTag
+            });
+            release = data;
+        } else {
+            throw error;
+        }
+    }
 
     // 2. Upload l'asset (le .zip)
     // On utilise fetch direct pour éviter les soucis de CORS que Octokit peut provoquer dans le navigateur
