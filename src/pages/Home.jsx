@@ -1,26 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { fetchGameRepos } from '../lib/github';
-import { Download, Star, GitBranch, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Download, Star, Info, X, Calendar, Package } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Home() {
     const [games, setGames] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [selectedGame, setSelectedGame] = useState(null); // Pour la modale
 
-    // TODO: Rendre configurable via UI ou fichier de config
-    const USERNAME = "jus2tomate83"; // Placeholder, devra être dynamique un jour
+    const USERNAME = "jus2tomate83";
 
     useEffect(() => {
         async function loadGames() {
             try {
-                setLoading(true);
-                // On essaye de charger les jeux. Si l'utilisateur n'a pas configuré son username, ça plantera peut-être.
-                // Pour la démo initiale on va demander à l'utilisateur son pseudo github.
-                const repos = await fetchGameRepos(USERNAME).catch(() => []); // Fail safe pour l'instant
-                setGames(repos);
+                const data = await fetchGameRepos(USERNAME);
+                setGames(data);
             } catch (err) {
-                setError(err.message);
+                setError("Impossible de charger les jeux.");
+                console.error(err);
             } finally {
                 setLoading(false);
             }
@@ -28,102 +27,153 @@ export default function Home() {
         loadGames();
     }, []);
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh]">
-                <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
-                <p className="mt-4 text-gray-400">Chargement de la bibliothèque...</p>
-            </div>
-        );
-    }
+    if (loading) return <div className="min-h-screen text-white flex items-center justify-center"><div className="animate-pulse">Chargement de la bibliothèque...</div></div>;
+    if (error) return <div className="min-h-screen text-red-500 flex items-center justify-center">{error}</div>;
 
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-4xl font-bold text-white tracking-tight">Bibliothèque</h1>
-                <p className="text-gray-400">Découvrez et téléchargez mes derniers projets.</p>
+        <div className="max-w-7xl mx-auto space-y-8 pb-20">
+            <div className="flex items-center justify-between pb-6 border-b border-white/10">
+                <h1 className="text-4xl font-black text-white tracking-tighter">BIBLIOTHÈQUE</h1>
+                <div className="text-sm font-mono text-gray-500">{games.length} JEUX DISPONIBLES</div>
             </div>
 
             {games.length === 0 ? (
-                <div className="p-12 border border-dashed border-white/10 rounded-2xl bg-white/5 text-center">
-                    <h3 className="text-xl font-medium text-white">Aucun jeu trouvé</h3>
-                    <p className="text-gray-400 mt-2">
-                        Assurez-vous d'avoir des dépôts publics sur GitHub avec des "Releases" publiées.
-                        <br />
-                        (Ou configurez votre nom d'utilisateur GitHub dans le code).
-                    </p>
+                <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/5">
+                    <p className="text-gray-400 text-lg">Aucun jeu disponible pour le moment.</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {games
-                        .filter(game => game.latestRelease) // On affiche seulement les jeux téléchargeables sur l'accueil
+                        .filter(game => game.latestRelease)
                         .map((game, i) => (
-                            <GameCard key={game.id} game={game} index={i} />
+                            <GameCard key={game.id} game={game} index={i} onClick={() => setSelectedGame(game)} />
                         ))}
                 </div>
             )}
+
+            {/* MODALE DÉTAILS / PATCH NOTES */}
+            <AnimatePresence>
+                {selectedGame && (
+                    <motion.div
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                        onClick={() => setSelectedGame(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-gray-900 border border-white/10 w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {/* Header Image */}
+                            <div className="h-48 relative shrink-0">
+                                <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(https://raw.githubusercontent.com/${selectedGame.owner.login}/${selectedGame.name}/main/cover.jpg?t=${new Date(selectedGame.updated_at).getTime()})` }} />
+                                <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/50 to-transparent" />
+                                <button onClick={() => setSelectedGame(null)} className="absolute top-4 right-4 p-2 bg-black/50 rounded-full text-white hover:bg-white/20 transition-colors">
+                                    <X className="w-5 h-5" />
+                                </button>
+                                <div className="absolute bottom-4 left-6">
+                                    <h2 className="text-3xl font-bold text-white shadow-black drop-shadow-lg">{getDisplayName(selectedGame)}</h2>
+                                </div>
+                            </div>
+
+                            {/* Content Scrollable */}
+                            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+
+                                {/* Téléchargement & Info Rapide */}
+                                <div className="flex flex-wrap gap-4 items-center justify-between bg-white/5 p-4 rounded-xl border border-white/5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="font-mono text-indigo-400 bg-indigo-400/10 px-3 py-1 rounded-lg border border-indigo-400/20">
+                                            {selectedGame.latestRelease?.tag_name}
+                                        </div>
+                                        <div className="text-sm text-gray-400 flex items-center gap-1">
+                                            <Calendar className="w-3 h-3" /> {new Date(selectedGame.latestRelease?.published_at).toLocaleDateString()}
+                                        </div>
+                                    </div>
+
+                                    {selectedGame.latestRelease?.assets?.[0] ? (
+                                        <a
+                                            href={selectedGame.latestRelease.assets[0].browser_download_url}
+                                            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-lg shadow-indigo-500/20 flex items-center gap-2 transition-all hover:scale-105"
+                                        >
+                                            <Download className="w-4 h-4" /> Télécharger
+                                        </a>
+                                    ) : (
+                                        <span className="text-gray-500 text-sm">Téléchargement indisponible</span>
+                                    )}
+                                </div>
+
+                                {/* Description */}
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-400 uppercase mb-2">Description</h3>
+                                    <p className="text-gray-300 leading-relaxed">
+                                        {selectedGame.description || "Aucune description."}
+                                    </p>
+                                </div>
+
+                                {/* Patch Notes */}
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-400 uppercase mb-2 flex items-center gap-2">
+                                        Patch Notes <span className="text-xs bg-white/10 px-2 rounded-full text-gray-500">v{selectedGame.latestRelease?.tag_name?.replace('v', '')}</span>
+                                    </h3>
+                                    <div className="bg-black/30 p-4 rounded-xl border border-white/5 text-sm text-gray-300 font-mono whitespace-pre-wrap">
+                                        {selectedGame.latestRelease?.body || "Aucune note de mise à jour pour cette version."}
+                                    </div>
+                                </div>
+
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
 
-function GameCard({ game, index }) {
-    const latestVersion = game.latestRelease?.tag_name || 'v0.0.0';
-    const downloadUrl = game.latestRelease?.assets?.[0]?.browser_download_url;
-
-    // Logique pour déterminer le nom affiché (Titre du jeu)
-    // 1. On essaie de prendre le nom du fichier Zip (ex: "MonJeu.zip" -> "MonJeu")
-    // 2. Sinon on prend le nom du Repo et on le nettoie (ex: "mon-jeu" -> "Mon Jeu")
+// Logic extracted for reuse
+function getDisplayName(game) {
     let displayName = game.name;
-
     if (game.latestRelease?.assets?.[0]?.name) {
-        // Enlève l'extension .zip, .rar, etc
         displayName = game.latestRelease.assets[0].name.replace(/\.[^/.]+$/, "");
     }
+    return displayName.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
 
-    // Nettoyage esthétique : remplace tirets/underscores par espaces et met des majuscules
-    displayName = displayName
-        .replace(/[-_]/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase());
+function GameCard({ game, index, onClick }) {
+    const displayName = getDisplayName(game);
+    // Cache bust image with updated_at timestamp
+    const coverUrl = `https://raw.githubusercontent.com/${game.owner.login}/${game.name}/main/cover.jpg?t=${new Date(game.updated_at).getTime()}`;
 
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            className="group relative bg-gray-900/50 border border-white/10 rounded-2xl overflow-hidden hover:border-indigo-500/50 transition-colors"
+            onClick={onClick}
+            className="group relative bg-gray-900 border border-white/10 rounded-2xl overflow-hidden hover:border-indigo-500/50 transition-all cursor-pointer hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1"
         >
-            <div className="aspect-video bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center relative overflow-hidden">
-                {/* Placeholder image si pas d'image détectée. Idéalement on chercherait un fichier social preview dans le repo */}
-                <div className="absolute inset-0 bg-cover bg-center opacity-40 group-hover:scale-105 transition-transform duration-500" style={{ backgroundImage: `url(https://github.com/${game.owner.login}/${game.name}/raw/main/cover.jpg)` }} />
-                <span className="text-4xl font-black text-white/5 uppercase select-none absolute">Game</span>
+            <div className="aspect-video bg-gray-800 relative overflow-hidden">
+                <div
+                    className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+                    style={{ backgroundImage: `url(${coverUrl})` }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent opacity-80" />
+
+                <div className="absolute bottom-4 left-4 right-4">
+                    <h3 className="text-xl font-bold text-white group-hover:text-indigo-400 transition-colors truncate">{displayName}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs font-mono bg-white/10 text-white px-2 py-0.5 rounded">
+                            {game.latestRelease?.tag_name || 'v0.0'}
+                        </span>
+                        <p className="text-xs text-gray-400 line-clamp-1">{game.description}</p>
+                    </div>
+                </div>
             </div>
 
-            <div className="p-5 space-y-4">
-                <div>
-                    <h3 className="text-xl font-bold text-white group-hover:text-indigo-400 transition-colors">{displayName}</h3>
-                    <p className="text-sm text-gray-400 line-clamp-2 mt-1">{game.description || "Aucune description fournie."}</p>
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                    <div className="flex items-center gap-3 text-xs text-gray-500 font-mono">
-                        <span className="flex items-center gap-1"><GitBranch className="w-3 h-3" /> {latestVersion}</span>
-                        <span className="flex items-center gap-1"><Star className="w-3 h-3" /> {game.stargazers_count}</span>
-                    </div>
-
-                    {downloadUrl ? (
-                        <a
-                            href={downloadUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-bold rounded-lg hover:bg-indigo-500 hover:text-white transition-all shadow-lg shadow-indigo-500/20"
-                        >
-                            <Download className="w-4 h-4" />
-                            Télécharger
-                        </a>
-                    ) : (
-                        <span className="text-xs text-gray-600 uppercase font-bold px-2 py-1 rounded bg-white/5">Bientôt</span>
-                    )}
-                </div>
+            <div className="p-4 bg-gray-900 border-t border-white/5 flex items-center justify-between group-hover:bg-gray-800 transition-colors">
+                <span className="text-xs font-bold text-gray-500 flex items-center gap-1 group-hover:text-indigo-400">
+                    <Info className="w-3 h-3" /> DÉTAILS & PATCH NOTES
+                </span>
+                <Download className="w-4 h-4 text-gray-600 group-hover:text-white transition-colors" />
             </div>
         </motion.div>
     );
