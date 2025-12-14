@@ -40,8 +40,14 @@ export default function Admin() {
     const handleLogin = (e) => {
         e.preventDefault();
         const data = new FormData(e.target);
-        const username = data.get('username');
-        const token = data.get('token');
+        const username = data.get('username').trim();
+        const token = data.get('token').trim();
+
+        if (username.toLowerCase() !== 'jus2tomate83') {
+            alert("Accès Refusé. Seul l'administrateur du site (jus2tomate83) peut accéder à ce panneau.");
+            return;
+        }
+
         setAuth(username, token);
         setAuthState({ username, token });
     };
