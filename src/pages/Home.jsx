@@ -70,6 +70,21 @@ function GameCard({ game, index }) {
     const latestVersion = game.latestRelease?.tag_name || 'v0.0.0';
     const downloadUrl = game.latestRelease?.assets?.[0]?.browser_download_url;
 
+    // Logique pour déterminer le nom affiché (Titre du jeu)
+    // 1. On essaie de prendre le nom du fichier Zip (ex: "MonJeu.zip" -> "MonJeu")
+    // 2. Sinon on prend le nom du Repo et on le nettoie (ex: "mon-jeu" -> "Mon Jeu")
+    let displayName = game.name;
+
+    if (game.latestRelease?.assets?.[0]?.name) {
+        // Enlève l'extension .zip, .rar, etc
+        displayName = game.latestRelease.assets[0].name.replace(/\.[^/.]+$/, "");
+    }
+
+    // Nettoyage esthétique : remplace tirets/underscores par espaces et met des majuscules
+    displayName = displayName
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -85,7 +100,7 @@ function GameCard({ game, index }) {
 
             <div className="p-5 space-y-4">
                 <div>
-                    <h3 className="text-xl font-bold text-white group-hover:text-indigo-400 transition-colors">{game.name}</h3>
+                    <h3 className="text-xl font-bold text-white group-hover:text-indigo-400 transition-colors">{displayName}</h3>
                     <p className="text-sm text-gray-400 line-clamp-2 mt-1">{game.description || "Aucune description fournie."}</p>
                 </div>
 
