@@ -79,18 +79,30 @@ export default function Admin() {
 
     const handleUpload = async (e) => {
         e.preventDefault();
-        if (!file || !selectedGame || !version) return;
+        if (!file || !selectedGame || !version || !customGameName) return;
 
         setLoading(true);
         setUploadStatus({ type: '', msg: '' });
 
+        // Renommage du zip
+        const finalName = customGameName.trim().replace(/[^a-zA-Z0-9-_ ]/g, '') + '.zip';
+        const renamedFile = new File([file], finalName, { type: file.type }); // Assuming renameFile function is defined or replaced with this logic
+
         try {
-            const result = await uploadGameVersion(selectedGame.name, version, file, `Version ${version}`);
+            // 1. Upload de la nouvelle cover si présente
+            if (coverFile) {
+                await uploadFileToRepo(selectedGame.name, 'cover.jpg', coverFile, `Update cover for v${version}`);
+            }
+
+            // 2. Création Release & Upload Zip
+            const result = await uploadGameVersion(selectedGame.name, version, renamedFile, `Version ${version} - ${customGameName}`);
 
             if (result.success) {
-                setUploadStatus({ type: 'success', msg: `Version ${version} uploadée avec succès !` });
+                setUploadStatus({ type: 'success', msg: `Version ${version} de "${customGameName}" uploadée (avec nouvelle image) !` });
                 setFile(null);
+                setCoverFile(null);
                 setVersion('');
+                setCustomGameName('');
                 loadGames();
             } else {
                 setUploadStatus({
